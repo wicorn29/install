@@ -4,70 +4,78 @@ main() {
     clear
     echo -e "Welcome to the MacSploit Experience!"
     echo -e "Install Script Version 2.6"
-
     echo -e "No license required! Enjoy MacSploit for free!"
 
-    echo -e "Downloading Latest Roblox..."
-    [ -f ./RobloxPlayer.zip ] && rm ./RobloxPlayer.zip
-    local robloxVersionInfo=$(curl -s "https://clientsettingscdn.roblox.com/v2/client-version/MacPlayer")
-    local versionInfo=$(curl -s "https://git.raptor.fun/main/version.json")
-    
-    local mChannel=$(echo $versionInfo | ./jq -r ".channel")
-    local version=$(echo $versionInfo | ./jq -r ".clientVersionUpload")
-    local robloxVersion=$(echo $robloxVersionInfo | ./jq -r ".clientVersionUpload")
-    
-    if [ "$version" != "$robloxVersion" ] && [ "$mChannel" == "preview" ]
-    then
-        curl "http://setup.rbxcdn.com/mac/$robloxVersion-RobloxPlayer.zip" -o "./RobloxPlayer.zip"
-    else
-        curl "http://setup.rbxcdn.com/mac/$version-RobloxPlayer.zip" -o "./RobloxPlayer.zip"
+    # Download jq utility
+    echo -n "Downloading jq utility... "
+    curl -sSL "https://github.com/stedolan/jq/releases/download/jq-1.6/jq-osx-amd64" -o "./jq"
+    if [ ! -f ./jq ]; then
+        echo "Failed to download jq. Please check your internet connection."
+        exit 1
     fi
-    
+    chmod +x ./jq
+    echo "Done."
+
+    # Download Roblox version info
+    echo -e "Downloading Latest Roblox..."
+    local robloxVersionInfo=$(curl -s "https://clientsettingscdn.roblox.com/v2/client-version/MacPlayer")
+    if [ -z "$robloxVersionInfo" ]; then
+        echo "Failed to fetch Roblox version info. Please check your connection."
+        exit 1
+    fi
+    local robloxVersion=$(echo $robloxVersionInfo | ./jq -r ".clientVersionUpload")
+
+    # Download RobloxPlayer.zip
+    echo -e "Downloading RobloxPlayer.zip..."
+    curl -sSL "http://setup.rbxcdn.com/mac/$robloxVersion-RobloxPlayer.zip" -o "./RobloxPlayer.zip"
+    if [ ! -f ./RobloxPlayer.zip ]; then
+        echo "Failed to download RobloxPlayer.zip. Please check your internet connection."
+        exit 1
+    fi
+
+    # Install Roblox
     echo -n "Installing Latest Roblox... "
     [ -d "/Applications/Roblox.app" ] && rm -rf "/Applications/Roblox.app"
-    unzip -o -q "./RobloxPlayer.zip"
+    unzip -o -q "./RobloxPlayer.zip" || {
+        echo "Failed to unzip RobloxPlayer.zip. The file might be corrupted."
+        exit 1
+    }
     mv ./RobloxPlayer.app /Applications/Roblox.app
     rm ./RobloxPlayer.zip
-    echo -e "Done."
+    echo "Done."
 
+    # Download and install MacSploit
     echo -e "Downloading MacSploit..."
-    curl "https://git.raptor.fun/main/macsploit.zip" -o "./MacSploit.zip"
-
+    curl -sSL "https://git.raptor.fun/main/macsploit.zip" -o "./MacSploit.zip"
+    if [ ! -f ./MacSploit.zip ]; then
+        echo "Failed to download MacSploit.zip. Please check your connection."
+        exit 1
+    fi
     echo -n "Installing MacSploit... "
     unzip -o -q "./MacSploit.zip"
-    echo -e "Done."
-
-    echo -n "Updating Dylib..."
-    if [ "$version" != "$robloxVersion" ] && [ "$mChannel" == "preview" ]
-    then
-        curl -Os "https://git.raptor.fun/preview/macsploit.dylib"
-    else
-        curl -Os "https://git.raptor.fun/main/macsploit.dylib"
-    fi
-    
-    echo -e " Done."
-    echo -e "Patching Roblox..."
-    mv ./macsploit.dylib "/Applications/Roblox.app/Contents/MacOS/macsploit.dylib"
-    mv ./libdiscord-rpc.dylib "/Applications/Roblox.app/Contents/MacOS/libdiscord-rpc.dylib"
-    ./insert_dylib "/Applications/Roblox.app/Contents/MacOS/macsploit.dylib" "/Applications/Roblox.app/Contents/MacOS/RobloxPlayer" --strip-codesig --all-yes
-    mv "/Applications/Roblox.app/Contents/MacOS/RobloxPlayer_patched" "/Applications/Roblox.app/Contents/MacOS/RobloxPlayer"
-    rm -r "/Applications/Roblox.app/Contents/MacOS/RobloxPlayerInstaller.app"
-    rm ./insert_dylib
-
-    echo -n "Installing MacSploit App... "
-    [ -d "/Applications/MacSploit.app" ] && rm -rf "/Applications/MacSploit.app"
     mv ./MacSploit.app /Applications/MacSploit.app
     rm ./MacSploit.zip
-    
-    touch ~/Downloads/ms-version.json
-    echo $versionInfo > ~/Downloads/ms-version.json
-    if [ "$version" != "$robloxVersion" ] && [ "$mChannel" == "preview" ]
-    then
-        cat <<< $(./jq '.channel = "previewb"' ~/Downloads/ms-version.json) > ~/Downloads/ms-version.json
+    echo "Done."
+
+    # Update and patch Roblox
+    echo -n "Updating Dylib..."
+    curl -sSL "https://git.raptor.fun/main/macsploit.dylib" -o "./macsploit.dylib"
+    curl -sSL "https://git.raptor.fun/main/libdiscord-rpc.dylib" -o "./libdiscord-rpc.dylib"
+    if [ -f ./macsploit.dylib ] && [ -f ./libdiscord-rpc.dylib ]; then
+        mv ./macsploit.dylib "/Applications/Roblox.app/Contents/MacOS/macsploit.dylib"
+        mv ./libdiscord-rpc.dylib "/Applications/Roblox.app/Contents/MacOS/libdiscord-rpc.dylib"
+        ./insert_dylib "/Applications/Roblox.app/Contents/MacOS/macsploit.dylib" "/Applications/Roblox.app/Contents/MacOS/RobloxPlayer" --strip-codesig --all-yes
+        mv "/Applications/Roblox.app/Contents/MacOS/RobloxPlayer_patched" "/Applications/Roblox.app/Contents/MacOS/RobloxPlayer"
+        rm -r "/Applications/Roblox.app/Contents/MacOS/RobloxPlayerInstaller.app"
+        rm ./insert_dylib
+        echo "Done."
+    else
+        echo "Failed to download dylib files. Please check your connection."
+        exit 1
     fi
-    
-    echo -e "Done."
+
     echo -e "Install Complete! Developed by Nexus42!"
+    rm ./jq
     exit
 }
 
